@@ -28,7 +28,6 @@ def init_db():
     """)
 
 
-init_db()
 
 @mcp.tool()
 def add_expense(
