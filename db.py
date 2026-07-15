@@ -8,21 +8,30 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
-    raise ValueError("DATABASE_URL not found in .env")
+    raise ValueError("DATABASE_URL not found in environment variables")
 
-pool = SimpleConnectionPool(
-    minconn=1,
-    maxconn=10,
-    dsn=DATABASE_URL
-)
+_pool = None
+
+
+def get_pool():
+    global _pool
+
+    if _pool is None:
+        _pool = SimpleConnectionPool(
+            minconn=1,
+            maxconn=10,
+            dsn=DATABASE_URL
+        )
+
+    return _pool
 
 
 def get_connection():
-    return pool.getconn()
+    return get_pool().getconn()
 
 
 def release_connection(conn):
-    pool.putconn(conn)
+    get_pool().putconn(conn)
 
 
 def execute_query(query, params=None, fetch=False, fetchone=False):
@@ -36,12 +45,10 @@ def execute_query(query, params=None, fetch=False, fetchone=False):
 
             if fetch:
                 result = cur.fetchall()
-
             elif fetchone:
                 result = cur.fetchone()
 
             conn.commit()
-
             return result
 
     except Exception:
