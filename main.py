@@ -523,6 +523,13 @@ def budget_status(month: str):
 
     return result
 
+@mcp.tool()
+def test_db():
+    result = execute_query(
+        "SELECT NOW() as current_time;",
+        fetchone=True
+    )
+    return result
 
 if __name__ == '__main__':
     mcp.run(
