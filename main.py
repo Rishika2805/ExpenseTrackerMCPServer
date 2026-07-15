@@ -536,7 +536,8 @@ def test_db():
         traceback.print_exc()
 
         return {
-            "error": str(e),
+            "error": repr(e),
+            "args": e.args,
             "type": type(e).__name__
         }
 
