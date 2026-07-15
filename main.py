@@ -525,11 +525,20 @@ def budget_status(month: str):
 
 @mcp.tool()
 def test_db():
-    result = execute_query(
-        "SELECT NOW() as current_time;",
-        fetchone=True
-    )
-    return result
+    try:
+        result = execute_query(
+            "SELECT NOW() as current_time;",
+            fetchone=True
+        )
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+
+        return {
+            "error": str(e),
+            "type": type(e).__name__
+        }
 
 if __name__ == '__main__':
     mcp.run(
