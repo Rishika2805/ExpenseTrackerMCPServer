@@ -1,42 +1,32 @@
-from datetime import datetime
-
 from fastmcp import FastMCP
-import os
-import sqlite3
+from db import execute_query
 
+mcp = FastMCP("ExpenseTracker")
 
-DB_PATH = os.path.join(os.path.dirname(__file__), 'expenses.db')
-CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), 'categories.json')
-
-def get_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-mcp = FastMCP('ExpenseTracker')
 
 def init_db():
-    with get_connection() as conn:
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS expenses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,   
-                date TEXT NOT NULL,
-                amount REAL NOT NULL,
-                category TEXT NOT NULL,
-                subcategory TEXT DEFAULT '',
-                note TEXT DEFAULT ''
-            )
-        ''')
 
-    conn.execute("""
-                  CREATE TABLE IF NOT EXISTS budgets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                category TEXT NOT NULL,
-                amount REAL NOT NULL,
-                month TEXT NOT NULL,
-                UNIQUE(category, month)
-                      )
-                 """)
+    execute_query("""
+        CREATE TABLE IF NOT EXISTS expenses(
+            id SERIAL PRIMARY KEY,
+            date DATE NOT NULL,
+            amount NUMERIC(10,2) NOT NULL,
+            category TEXT NOT NULL,
+            subcategory TEXT DEFAULT '',
+            note TEXT DEFAULT ''
+        );
+    """)
+
+    execute_query("""
+        CREATE TABLE IF NOT EXISTS budgets(
+            id SERIAL PRIMARY KEY,
+            category TEXT NOT NULL,
+            amount NUMERIC(10,2) NOT NULL,
+            month TEXT NOT NULL,
+            UNIQUE(category, month)
+        );
+    """)
+
 
 init_db()
 
@@ -46,97 +36,131 @@ def add_expense(
     amount: float,
     category: str,
     subcategory: str = "",
-    note: str = ""):
+    note: str = ""
+):
     """
-      Add a new expense to the SQLite database.
+    Add a new expense.
     """
-    with sqlite3.connect(DB_PATH) as conn:
-        cur = conn.execute(
-            '''INSERT INTO expenses (date, amount, category, subcategory, note)VALUES (?, ?, ?, ?, ?)''',
-            (date, amount, category, subcategory, note)
-        )
-        return {'Status' : 'ok' , 'id' : cur.lastrowid}
+
+    expense = execute_query(
+        """
+        INSERT INTO expenses
+        (date, amount, category, subcategory, note)
+        VALUES (%s, %s, %s, %s, %s)
+        RETURNING id;
+        """,
+        (date, amount, category, subcategory, note),
+        fetchone=True
+    )
+
+    return {
+        "success": True,
+        "message": "Expense added successfully.",
+        "data": expense
+    }
 
 
 
 
 @mcp.tool()
-def list_expenses() -> list:
+def list_expenses():
     """
-    List all expense entries from the database
+    Return all expenses.
     """
-    with get_connection() as conn:
-        cur = conn.execute(
-            '''SELECT id, date, amount, category, subcategory, note FROM expenses ORDER BY id ASC'''
-        )
-        return [dict(row) for row in cur.fetchall()]
+
+    expenses = execute_query(
+        """
+        SELECT
+            id,
+            date,
+            amount,
+            category,
+            subcategory,
+            note
+        FROM expenses
+        ORDER BY id;
+        """,
+        fetch=True
+    )
+
+    return expenses
 
 
 
 @mcp.tool()
-def delete_expense(id: int):
+def delete_expense(expense_id: int):
     """
     Delete an expense by its ID.
     """
-    with get_connection() as conn:
-        cur = conn.execute(
-            '''DELETE FROM expenses WHERE id = ?''',
-            (id,)
-        )
 
-        if cur.rowcount == 0:
-            return {
-                'Status' : 'error',
-                'message' : f'No expense with that ID was found {id}.'
-            }
+    expense = execute_query(
+        """
+        DELETE FROM expenses
+        WHERE id = %s
+        RETURNING id;
+        """,
+        (expense_id,),
+        fetchone=True
+    )
 
+    if expense is None:
         return {
-            'Status' : 'success',
-            'message' : f'Successfully deleted expense with ID {id}.'
+            "success": False,
+            "message": f"No expense found with ID {expense_id}."
         }
+
+    return {
+        "success": True,
+        "message": f"Expense {expense_id} deleted successfully."
+    }
 
 @mcp.tool()
 def update_expense(
-        expense_id: int,
-        date: str,
-        amount: float,
-        category: str,
-        subcategory: str = "",
-        note: str = ""
+    expense_id: int,
+    date: str,
+    amount: float,
+    category: str,
+    subcategory: str = "",
+    note: str = ""
 ):
     """
-    Update an expense
+    Update an existing expense.
     """
-    with get_connection() as conn:
-        cur = conn.execute(
-            '''UPDATE expenses 
-            SET 
-                date = ?,
-                amount = ?,
-                category = ?,
-                subcategory = ?, 
-                note = ?
-            WHERE id = ?''',
-            (
-                date,
-                amount,
-                category,
-                subcategory,
-                note,
-                expense_id
-            )
-        )
 
-        if cur.rowcount == 0:
-            return {
-                'Status' : 'error',
-                'message' : f'Expense not found.'
-            }
+    expense = execute_query(
+        """
+        UPDATE expenses
+        SET
+            date = %s,
+            amount = %s,
+            category = %s,
+            subcategory = %s,
+            note = %s
+        WHERE id = %s
+        RETURNING id;
+        """,
+        (
+            date,
+            amount,
+            category,
+            subcategory,
+            note,
+            expense_id
+        ),
+        fetchone=True
+    )
 
+    if expense is None:
         return {
-            'Status' : 'success',
-            'message' : f'Successfully updated Expense.'
+            "success": False,
+            "message": f"Expense with ID {expense_id} not found."
         }
+
+    return {
+        "success": True,
+        "message": "Expense updated successfully.",
+        "data": expense
+    }
 
 
 @mcp.tool()
@@ -144,38 +168,39 @@ def total_expenses():
     """
     Get total spending.
     """
-    with get_connection() as conn:
-        cur = conn.execute(
-            """
-            SELECT SUM(amount) AS total 
-            FROM expenses """
-        )
 
-        total = cur.fetchone()['total']
-        return {
-            'total_spent' : total if total else 0,
-        }
+    result = execute_query(
+        """
+        SELECT COALESCE(SUM(amount), 0) AS total
+        FROM expenses;
+        """,
+        fetchone=True
+    )
+
+    return {
+        "total_spent": float(result["total"])
+    }
 
 
 @mcp.tool()
 def category_summary():
     """
-    Show Spending Grouped by category.
+    Show spending grouped by category.
     """
 
-    with get_connection() as conn:
-        cur = conn.execute(
-            """
-            SELECT 
+    result = execute_query(
+        """
+        SELECT
             category,
             SUM(amount) AS total
-            FROM expenses 
-            GROUP BY category
-            ORDER BY total DESC
-            """
-        )
+        FROM expenses
+        GROUP BY category
+        ORDER BY total DESC;
+        """,
+        fetch=True
+    )
 
-        return [dict(row) for row in cur.fetchall()]
+    return result
 
 
 @mcp.tool()
@@ -183,77 +208,106 @@ def expenses_by_category(category: str):
     """
     Get all expenses for a category.
     """
-    with get_connection() as conn:
-        cur = conn.execute(
-            """
-            SELECT *
-            FROM expenses
-            WHERE category = ?
-            ORDER BY date DESC
-            """,
-            (category,)
-        )
 
-        return [dict(row) for row in cur.fetchall()]
+    result = execute_query(
+        """
+        SELECT
+            id,
+            date,
+            amount,
+            category,
+            subcategory,
+            note
+        FROM expenses
+        WHERE category = %s
+        ORDER BY date DESC;
+        """,
+        (category,),
+        fetch=True
+    )
 
+    return result
 
-@mcp.tool()
-def expenses_between(strat_date: str,end_date:str):
-    """
-    List Expenses between two dates.
-    """
-
-    with get_connection() as conn:
-        cur = conn.execute(
-            """
-            SELECT * 
-            FROM expenses 
-            WHERE date BETWEEN ? AND ?
-            ORDER BY date ASC""",
-            (strat_date,end_date)
-        )
-
-        return [dict(row) for row in cur.fetchall()]
 
 @mcp.tool()
-def recent_expenses(limit : int = 5):
+def expenses_between(start_date: str, end_date: str):
     """
-    Get recent expenses.
+    List expenses between two dates.
+
+    Example:
+        start_date = "2026-07-01"
+        end_date = "2026-07-31"
     """
 
-    with get_connection() as conn:
-        cur = conn.execute(
-            """
-            SELECT * 
-            FROM expenses 
-            ORDER BY date DESC LIMIT ?""",
-            (limit,)
-        )
+    expenses = execute_query(
+        """
+        SELECT
+            id,
+            date,
+            amount,
+            category,
+            subcategory,
+            note
+        FROM expenses
+        WHERE date BETWEEN %s AND %s
+        ORDER BY date ASC;
+        """,
+        (start_date, end_date),
+        fetch=True
+    )
 
-        return [dict(row) for row in cur.fetchall()]
+    return expenses
+
+@mcp.tool()
+def recent_expenses(limit: int = 5):
+    """
+    Return the most recent expenses.
+    """
+
+    expenses = execute_query(
+        """
+        SELECT
+            id,
+            date,
+            amount,
+            category,
+            subcategory,
+            note
+        FROM expenses
+        ORDER BY date DESC
+        LIMIT %s;
+        """,
+        (limit,),
+        fetch=True
+    )
+
+    return expenses
 
 
 @mcp.tool()
 def monthly_summary(month: str):
     """
-    Example:
-    month = '2026-07'
-    """
-    with get_connection() as conn:
-        cur = conn.execute(
-            """
-            SELECT
-                category,
-                SUM(amount) AS total
-            FROM expenses
-            WHERE substr(date,1,7)=?
-            GROUP BY category
-            ORDER BY total DESC
-            """,
-            (month,)
-        )
+    Return spending grouped by category for a month.
 
-        return [dict(row) for row in cur.fetchall()]
+    Example:
+        month = "2026-07"
+    """
+
+    summary = execute_query(
+        """
+        SELECT
+            category,
+            SUM(amount) AS total
+        FROM expenses
+        WHERE TO_CHAR(date, 'YYYY-MM') = %s
+        GROUP BY category
+        ORDER BY total DESC;
+        """,
+        (month,),
+        fetch=True
+    )
+
+    return summary
 
 
 @mcp.tool()
@@ -261,48 +315,61 @@ def lowest_expense():
     """
     Return the lowest expense.
     """
-    with get_connection() as conn:
-        cur = conn.execute(
-            """
-            SELECT *
-            FROM expenses
-            ORDER BY amount ASC
-            LIMIT 1
-            """
-        )
 
-        row = cur.fetchone()
+    expense = execute_query(
+        """
+        SELECT
+            id,
+            date,
+            amount,
+            category,
+            subcategory,
+            note
+        FROM expenses
+        ORDER BY amount ASC
+        LIMIT 1;
+        """,
+        fetchone=True
+    )
 
-        if row is None:
-            return {
-                "message": "No expenses found."
-            }
+    if expense is None:
+        return {
+            "success": False,
+            "message": "No expenses found."
+        }
 
-        return dict(row)
+    return expense
+
 
 @mcp.tool()
 def highest_expense():
     """
     Return the highest expense.
     """
-    with get_connection() as conn:
-        cur = conn.execute(
-            """
-            SELECT *
-            FROM expenses
-            ORDER BY amount DESC
-            LIMIT 1
-            """
-        )
 
-        row = cur.fetchone()
+    expense = execute_query(
+        """
+        SELECT
+            id,
+            date,
+            amount,
+            category,
+            subcategory,
+            note
+        FROM expenses
+        ORDER BY amount DESC
+        LIMIT 1;
+        """,
+        fetchone=True
+    )
 
-        if row is None:
-            return {
-                "message": "No expenses found."
-            }
+    if expense is None:
+        return {
+            "success": False,
+            "message": "No expenses found."
+        }
 
-        return dict(row)
+    return expense
 
 @mcp.tool()
 def set_budget(
@@ -311,7 +378,7 @@ def set_budget(
     month: str
 ):
     """
-    Set or update a monthly budget for a category.
+    Set or update a monthly budget.
 
     Example:
         category="Food"
@@ -319,129 +386,143 @@ def set_budget(
         month="2026-07"
     """
 
-    with get_connection() as conn:
-        conn.execute("""
-            INSERT INTO budgets(category, amount, month)
-            VALUES (?, ?, ?)
-            ON CONFLICT(category, month)
-            DO UPDATE SET amount = excluded.amount
-        """, (category, amount, month))
+    execute_query(
+        """
+        INSERT INTO budgets(category, amount, month)
+        VALUES (%s, %s, %s)
+        ON CONFLICT(category, month)
+        DO UPDATE SET amount = EXCLUDED.amount;
+        """,
+        (category, amount, month)
+    )
 
     return {
-        "status": "success",
-        "message": f"Budget for {category} set to ₹{amount} for {month}."
+        "success": True,
+        "message": f"Budget for '{category}' set to ₹{amount} for {month}."
     }
 
 @mcp.tool()
 def get_budget(month: str):
     """
     Return all budgets for a month.
-
-    Example:
-        month="2026-07"
     """
 
-    with get_connection() as conn:
-        cur = conn.execute("""
-            SELECT
-                category,
-                amount
-            FROM budgets
-            WHERE month = ?
-            ORDER BY category
-        """, (month,))
+    budgets = execute_query(
+        """
+        SELECT
+            category,
+            amount
+        FROM budgets
+        WHERE month = %s
+        ORDER BY category;
+        """,
+        (month,),
+        fetch=True
+    )
 
-        return [dict(row) for row in cur.fetchall()]
+    return budgets
 
 
+
+from datetime import datetime
 
 @mcp.tool()
 def remaining_budget(category: str, month: str | None = None):
     """
     Calculate remaining budget for a category.
-
-    Example:
-        category="Food"
-        month="2026-07"
     """
+
     if month is None:
         month = datetime.now().strftime("%Y-%m")
-    with get_connection() as conn:
 
-        budget = conn.execute("""
-            SELECT amount
-            FROM budgets
-            WHERE category = ?
-            AND month = ?
-        """, (category, month)).fetchone()
+    budget = execute_query(
+        """
+        SELECT amount
+        FROM budgets
+        WHERE category = %s
+        AND month = %s;
+        """,
+        (category, month),
+        fetchone=True
+    )
 
-        if budget is None:
-            return {
-                "status": "error",
-                "message": "No budget found."
-            }
-
-        spent = conn.execute("""
-            SELECT COALESCE(SUM(amount),0) AS spent
-            FROM expenses
-            WHERE category = ?
-            AND substr(date,1,7) = ?
-        """, (category, month)).fetchone()["spent"]
-
-        remaining = budget["amount"] - spent
-
-        percentage = (spent / budget["amount"]) * 100 if budget["amount"] else 0
-
+    if budget is None:
         return {
-            "category": category,
-            "month": month,
-            "budget": budget["amount"],
-            "spent": spent,
-            "remaining": remaining,
-            "used_percent": round(percentage, 2)
+            "success": False,
+            "message": "No budget found."
         }
+
+    spent = execute_query(
+        """
+        SELECT COALESCE(SUM(amount),0) AS spent
+        FROM expenses
+        WHERE category = %s
+        AND TO_CHAR(date, 'YYYY-MM') = %s;
+        """,
+        (category, month),
+        fetchone=True
+    )
+
+    spent_amount = float(spent["spent"])
+    budget_amount = float(budget["amount"])
+    remaining = budget_amount - spent_amount
+
+    return {
+        "category": category,
+        "month": month,
+        "budget": budget_amount,
+        "spent": spent_amount,
+        "remaining": remaining,
+        "used_percent": round((spent_amount / budget_amount) * 100, 2) if budget_amount else 0
+    }
 
 @mcp.tool()
 def budget_status(month: str):
     """
-    Return budget usage for all categories in a month.
+    Return budget usage for all categories.
     """
 
-    with get_connection() as conn:
+    budgets = execute_query(
+        """
+        SELECT
+            category,
+            amount
+        FROM budgets
+        WHERE month = %s
+        ORDER BY category;
+        """,
+        (month,),
+        fetch=True
+    )
 
-        budgets = conn.execute("""
-            SELECT category, amount
-            FROM budgets
-            WHERE month = ?
-        """, (month,)).fetchall()
+    result = []
 
-        result = []
+    for budget in budgets:
 
-        for budget in budgets:
+        spent = execute_query(
+            """
+            SELECT COALESCE(SUM(amount),0) AS spent
+            FROM expenses
+            WHERE category = %s
+            AND TO_CHAR(date, 'YYYY-MM') = %s;
+            """,
+            (budget["category"], month),
+            fetchone=True
+        )
 
-            spent = conn.execute("""
-                SELECT COALESCE(SUM(amount),0) AS spent
-                FROM expenses
-                WHERE category = ?
-                AND substr(date,1,7)=?
-            """, (budget["category"], month)).fetchone()["spent"]
+        spent_amount = float(spent["spent"])
+        budget_amount = float(budget["amount"])
+        remaining = budget_amount - spent_amount
 
-            remaining = budget["amount"] - spent
+        result.append({
+            "category": budget["category"],
+            "budget": budget_amount,
+            "spent": spent_amount,
+            "remaining": remaining,
+            "used_percent": round((spent_amount / budget_amount) * 100, 2) if budget_amount else 0
+        })
 
-            percent = (
-                spent / budget["amount"] * 100
-                if budget["amount"] else 0
-            )
-
-            result.append({
-                "category": budget["category"],
-                "budget": budget["amount"],
-                "spent": spent,
-                "remaining": remaining,
-                "used_percent": round(percent, 2)
-            })
-
-        return result
+    return result
 
 
 if __name__ == '__main__':
