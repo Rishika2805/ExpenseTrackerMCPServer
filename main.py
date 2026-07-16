@@ -38,7 +38,26 @@ def add_expense(
     note: str = ""
 ):
     """
-    Add a new expense.
+    Add a new expense record to the expense tracker.
+
+    Use this tool ONLY when the user wants to:
+    - Add a new expense
+    - Record a purchase
+    - Log spending
+    - Save an expense
+    - Track money spent
+
+    Examples:
+    - "I spent ₹500 on food."
+    - "Add ₹250 for coffee."
+    - "Log an expense of ₹1200 for groceries."
+    - "Record ₹800 spent on petrol."
+
+    Required:
+    - date
+    - amount
+    - category
+
     """
 
     expense = execute_query(
@@ -64,7 +83,16 @@ def add_expense(
 @mcp.tool()
 def list_expenses():
     """
-    Return all expenses.
+    Return every expense stored in the database.
+
+    Use this tool when the user asks:
+    - Show all expenses
+    - List my expenses
+    - Display all transactions
+    - View expense history
+    - Show everything I have spent
+
+    Do NOT use for recent expenses, category summaries, budgets, or analytics.
     """
 
     expenses = execute_query(
@@ -89,7 +117,19 @@ def list_expenses():
 @mcp.tool()
 def delete_expense(expense_id: int):
     """
-    Delete an expense by its ID.
+    Delete an expense using its expense ID.
+
+    Use this tool ONLY when the user explicitly wants to remove an expense.
+
+    Examples:
+    - Delete expense 4
+    - Remove expense ID 7
+    - Delete transaction 12
+
+    Requires:
+    - expense_id
+
+    Never use this tool for updates or analytics.
     """
 
     expense = execute_query(
@@ -124,6 +164,24 @@ def update_expense(
 ):
     """
     Update an existing expense.
+
+    Use this tool when the user wants to modify:
+    - amount
+    - date
+    - category
+    - subcategory
+    - note
+
+    Examples:
+    - Change expense 5 to ₹600
+    - Update expense 3
+    - Edit my grocery expense
+
+    Requires:
+    - expense_id
+    - updated values
+
+    Never use this tool to add or delete expenses.
     """
 
     expense = execute_query(
@@ -165,7 +223,15 @@ def update_expense(
 @mcp.tool()
 def total_expenses():
     """
-    Get total spending.
+    Calculate the total amount spent across all recorded expenses.
+
+    Use this tool when the user asks:
+    - Total expenses
+    - Total spending
+    - How much have I spent?
+    - Total money spent
+
+    Do NOT use for category summaries or highest/lowest expenses.
     """
 
     result = execute_query(
@@ -184,7 +250,25 @@ def total_expenses():
 @mcp.tool()
 def category_summary():
     """
-    Show spending grouped by category.
+    Calculate total spending grouped by category.
+
+    Use ONLY when the user wants spending grouped by categories.
+
+    Examples:
+    - Show spending by category
+    - Category-wise summary
+    - Where did I spend my money?
+    - Show category breakdown
+    - Spending distribution
+
+    Returns:
+    Each category and its total spending.
+
+    Do NOT use for:
+    - Highest expense
+    - Lowest expense
+    - Monthly totals
+    - Total spending
     """
 
     result = execute_query(
@@ -205,7 +289,20 @@ def category_summary():
 @mcp.tool()
 def expenses_by_category(category: str):
     """
-    Get all expenses for a category.
+    Return every expense belonging to one specific category.
+
+    Use when the user asks:
+    - Show food expenses
+    - List grocery expenses
+    - Show travel expenses
+    - Expenses for coffee
+
+    Requires:
+    - category
+
+    Returns individual expense records.
+
+    Do NOT use for grouped summaries.
     """
 
     result = execute_query(
@@ -231,11 +328,19 @@ def expenses_by_category(category: str):
 @mcp.tool()
 def expenses_between(start_date: str, end_date: str):
     """
-    List expenses between two dates.
+    Return every expense recorded between two dates.
 
-    Example:
-        start_date = "2026-07-01"
-        end_date = "2026-07-31"
+    Use when the user asks:
+    - Expenses this week
+    - Expenses last month
+    - Expenses between two dates
+    - Transactions from July
+
+    Requires:
+    - start_date
+    - end_date
+
+    Returns every matching expense.
     """
 
     expenses = execute_query(
@@ -261,6 +366,17 @@ def expenses_between(start_date: str, end_date: str):
 def recent_expenses(limit: int = 5):
     """
     Return the most recent expenses.
+
+    Use when the user asks:
+    - Recent expenses
+    - Latest transactions
+    - Last few expenses
+    - Most recent spending
+
+    Optional:
+    - limit
+
+    Do NOT use for complete history.
     """
 
     expenses = execute_query(
@@ -286,10 +402,20 @@ def recent_expenses(limit: int = 5):
 @mcp.tool()
 def monthly_summary(month: str):
     """
-    Return spending grouped by category for a month.
+    Return spending grouped by category for one month.
 
-    Example:
-        month = "2026-07"
+    Use ONLY when the user asks:
+    - Monthly summary
+    - Spending this month
+    - July summary
+    - Monthly spending breakdown
+
+    Requires:
+    - month
+
+    Returns category totals for that month.
+
+    Do NOT use for highest or lowest expense.
     """
 
     summary = execute_query(
@@ -312,9 +438,19 @@ def monthly_summary(month: str):
 @mcp.tool()
 def lowest_expense():
     """
-    Return the lowest expense.
-    """
+    Return the single expense with the smallest amount.
 
+    Use ONLY when the user asks:
+    - Lowest expense
+    - Cheapest purchase
+    - Smallest expense
+    - Least expensive transaction
+    - What did I spend the least on?
+
+    Returns one expense record.
+
+    Never use for category summaries.
+    """
     expense = execute_query(
         """
         SELECT
@@ -343,7 +479,18 @@ def lowest_expense():
 @mcp.tool()
 def highest_expense():
     """
-    Return the highest expense.
+    Return the single expense with the largest amount.
+
+    Use ONLY when the user asks:
+    - Highest expense
+    - Biggest purchase
+    - Largest expense
+    - Most expensive transaction
+    - What did I spend the most on?
+
+    Returns one expense record.
+
+    Never use for category summaries.
     """
 
     expense = execute_query(
@@ -377,12 +524,24 @@ def set_budget(
     month: str
 ):
     """
-    Set or update a monthly budget.
+    Create or update a monthly budget for one category.
 
-    Example:
-        category="Food"
-        amount=5000
-        month="2026-07"
+    Use when the user wants to:
+    - Set a budget
+    - Create a budget
+    - Update a budget
+    - Change budget amount
+
+    Examples:
+    - Set food budget to ₹5000
+    - Set travel budget to ₹3000
+
+    Requires:
+    - category
+    - amount
+    - month
+
+    Never use for retrieving budgets.
     """
 
     execute_query(
@@ -403,7 +562,20 @@ def set_budget(
 @mcp.tool()
 def get_budget(month: str):
     """
-    Return all budgets for a month.
+    Return every budget for a specific month.
+
+    Use when the user asks:
+    - Show my budgets
+    - List budgets
+    - View monthly budgets
+    - Budget for this month
+
+    Requires:
+    - month
+
+    Returns all categories and their budgets.
+
+    Do NOT calculate remaining budget.
     """
 
     budgets = execute_query(
@@ -428,7 +600,27 @@ from datetime import datetime
 @mcp.tool()
 def remaining_budget(category: str, month: str | None = None):
     """
-    Calculate remaining budget for a category.
+    Calculate remaining budget for one category.
+
+    Use when the user asks:
+    - Budget left
+    - Remaining budget
+    - How much budget is left?
+    - Remaining money in food budget
+
+    Requires:
+    - category
+
+    Optional:
+    - month
+
+    Returns:
+    - Budget
+    - Spent
+    - Remaining
+    - Usage percentage
+
+    Do NOT use for listing all budgets.
     """
 
     if month is None:
@@ -478,7 +670,25 @@ def remaining_budget(category: str, month: str | None = None):
 @mcp.tool()
 def budget_status(month: str):
     """
-    Return budget usage for all categories.
+    Return budget usage for every category.
+
+    Use when the user asks:
+    - Budget status
+    - Budget report
+    - Budget overview
+    - Show budget utilization
+    - Compare spending against budgets
+
+    Requires:
+    - month
+
+    Returns:
+    - Budget
+    - Spent
+    - Remaining
+    - Percentage used
+
+    Do NOT use for one specific category.
     """
 
     budgets = execute_query(
